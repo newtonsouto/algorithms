@@ -2,7 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-// Protótipos das funções de menu e cálculos
+
 void exibirMenu();
 double realizarCalculo(int opcao, double num1, double num2);
 
@@ -10,7 +10,7 @@ int main() {
     int opcao;
     double num1, num2, resultado;
 
-    while (1) { // Loop infinito para a calculadora
+    while (1) { 
         exibirMenu();
         printf("Escolha uma opcao: ");
         scanf("%d", &opcao);
@@ -19,8 +19,6 @@ int main() {
             printf("Saindo da calculadora. Ate mais!\n");
             break; // Sai do loop
         }
-
-        // Leitura dos números com base na opção
         if (opcao >= 1 && opcao <= 5) {
             printf("Digite o primeiro numero: ");
             scanf("%lf", &num1);
@@ -88,7 +86,7 @@ double realizarCalculo(int opcao, double num1, double num2) {
             } 
                 else {
                 printf("Erro: Divisao por zero!\n");
-                return NAN; // Retorna Not a Number
+                return NAN;
                 }
         case 5:
             return pow(num1, num2);
@@ -142,6 +140,6 @@ double realizarCalculo(int opcao, double num1, double num2) {
             return (double)resultado_fatorial;
         }
         default:
-            return NAN; // Not a Number
+            return NAN;
     }
 }

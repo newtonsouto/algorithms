@@ -45,4 +45,4 @@ Use o terminal e inclua a flag `-lm` para linkar a biblioteca matemática:
 
 ```bash
 # Compila o arquivo e cria um executável chamado 'calculadora'
-gcc calculadora_completa.c -o calculadora -lm
+gcc calculadora-cientifica.c -o calculadora -lm

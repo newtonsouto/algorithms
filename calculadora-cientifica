@@ -1,144 +1,677 @@
 #include <stdio.h>
-#include <math.h>
 #include <stdlib.h>
+#include <math.h>
+#include <string.h>
 
-// Protótipos das funções de menu e cálculos
-void exibirMenu();
-double realizarCalculo(int opcao, double num1, double num2);
+
+// Definições
+#define MAX_HISTORICO 10
+#define MAX_OPERACAO_NOME 30
+#define TAMANHO_MATRIZ 3
+#define MAX_ELEMENTOS_ARRAY 10
+
+// Constante PI para trigonometria
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+// Estrutura para o Historico
+typedef struct {
+    char tipo[MAX_OPERACAO_NOME];
+    double a, b;
+    double resultado;
+    int id;
+    int num_operandos;
+} Operacao;
+
+// Array Global para o Historico
+Operacao historico[MAX_HISTORICO];
+int contador_historico = 0;
+int proximo_id = 1;
+
+
+// Funções de utilidade/historico
+void limpar_buffer();
+double ler_double(const char *prompt);
+int ler_array_entrada(double array[]);
+void adicionar_historico(const char *tipo, double a, double b, double resultado, int num_operandos);
+void mostrar_historico();
+void salvar_historico_arquivo();
+
+// Modulo operações basicas
+double calcular_soma(double a, double b);
+double calcular_subtracao(double a, double b);
+double calcular_multiplicacao(double a, double b);
+double calcular_divisao(double a, double b, int *erro_divisao_zero);
+
+// Modulo operações avançadas
+double calcular_unario_avancado(int op_code, double num1, int *erro_matematico, char *tipo_op_out);
+double calcular_potencia(double base, double expoente); // Binária
+long long calcular_fatorial(int n); // Unária (Inteira)
+
+// Estatística
+void ordenar_array(double array[], int tamanho);
+void calcular_media_array(double array[], int tamanho);
+void calcular_mediana_array(double array[], int tamanho);
+
+// Teoria dos Números
+int calcular_mdc(int a, int b);
+int calcular_mmc(int a, int b);
+
+// Modulo operações com matrizes
+void ler_matriz(int M[TAMANHO_MATRIZ][TAMANHO_MATRIZ], const char *nome);
+void imprimir_matriz(int M[TAMANHO_MATRIZ][TAMANHO_MATRIZ]);
+void somar_matrizes(int A[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int B[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int C[TAMANHO_MATRIZ][TAMANHO_MATRIZ]);
+void multiplicar_matrizes(int A[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int B[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int C[TAMANHO_MATRIZ][TAMANHO_MATRIZ]);
+
+
+// Funções de utilidade
+void limpar_buffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+double ler_double(const char *prompt) {
+    double valor;
+    int resultado;
+    do {
+        printf("%s", prompt);
+        resultado = scanf("%lf", &valor);
+
+        if (resultado != 1) {
+            printf("Entrada invalida. Por favor, digite um numero.\n");
+            limpar_buffer();
+        }
+    } while (resultado != 1);
+    return valor;
+}
+
+int ler_array_entrada(double array[]) {
+    int tamanho = 0;
+    printf("Quantos numeros voce deseja inserir (max %d)? ", MAX_ELEMENTOS_ARRAY);
+    if (scanf("%d", &tamanho) != 1 || tamanho <= 0 || tamanho > MAX_ELEMENTOS_ARRAY) {
+        printf("Tamanho invalido ou excede o maximo (%d). Usando tamanho 0.\n", MAX_ELEMENTOS_ARRAY);
+        limpar_buffer();
+        return 0;
+    }
+
+    printf("Digite os %d numeros:\n", tamanho);
+    for (int i = 0; i < tamanho; i++) {
+        array[i] = ler_double("");
+    }
+    return tamanho;
+}
+
+// Funções de histórico
+
+void adicionar_historico(const char *tipo, double a, double b, double resultado, int num_operandos) {
+    int indice = contador_historico % MAX_HISTORICO;
+    strncpy(historico[indice].tipo, tipo, MAX_OPERACAO_NOME - 1);
+    historico[indice].tipo[MAX_OPERACAO_NOME - 1] = '\0';
+    historico[indice].a = a;
+    historico[indice].b = b;
+    historico[indice].resultado = resultado;
+    historico[indice].id = proximo_id++;
+    historico[indice].num_operandos = num_operandos;
+    contador_historico++;
+}
+
+void mostrar_historico() {
+    // mostrar historico
+    printf("\n--- HISTORICO DE OPERACOES ---\n");
+    int inicio = (contador_historico > MAX_HISTORICO) ? (contador_historico - MAX_HISTORICO) : 0;
+    int num_mostrar = (contador_historico > MAX_HISTORICO) ? MAX_HISTORICO : contador_historico;
+
+    if (num_mostrar == 0) {
+        printf("Nenhuma operacao registrada.\n");
+        return;
+    }
+
+    for (int i = 0; i < num_mostrar; i++) {
+        int indice = (inicio + i) % MAX_HISTORICO;
+        Operacao op = historico[indice];
+        printf("ID: %d | Tipo: %s | ", op.id, op.tipo);
+
+        if (op.num_operandos == 2) {
+            printf("Operandos: %.2f e %.2f | ", op.a, op.b);
+        } else if (op.num_operandos == 1) {
+             printf("Operando: %.2f | ", op.a);
+        } else {
+             printf("Operando: N/A | ");
+        }
+
+        printf("Resultado: %.4f\n", op.resultado);
+    }
+    printf("----------------------------\n");
+}
+
+void salvar_historico_arquivo() {
+    // salvando historico
+    FILE *arquivo = fopen("historico_calculadora.csv", "w");
+
+    if (arquivo == NULL) {
+        printf("ERRO: Nao foi possivel abrir/criar o arquivo de historico.\n");
+        return;
+    }
+
+    fprintf(arquivo, "ID;Tipo;Operando A;Operando B;Resultado\n");
+    int inicio = (contador_historico > MAX_HISTORICO) ? (contador_historico - MAX_HISTORICO) : 0;
+    int num_mostrar = (contador_historico > MAX_HISTORICO) ? MAX_HISTORICO : contador_historico;
+
+    if (num_mostrar == 0) {
+        printf("Historico vazio. Arquivo criado, mas sem dados.\n");
+        fclose(arquivo);
+        return;
+    }
+
+    for (int i = 0; i < num_mostrar; i++) {
+        int indice = (inicio + i) % MAX_HISTORICO;
+        Operacao op = historico[indice];
+
+        fprintf(arquivo, "%d;%s;%.4f;%.4f;%.4f\n",
+                op.id,
+                op.tipo,
+                op.a,
+                op.b,
+                op.resultado);
+    }
+
+    fclose(arquivo);
+    printf("\nHistorico salvo com sucesso em 'historico_calculadora.csv'!\n");
+}
+
+
+// Operações basicas
+
+double calcular_soma(double a, double b) {
+    double resultado = a + b;
+    adicionar_historico("Soma", a, b, resultado, 2);
+    return resultado;
+}
+
+double calcular_subtracao(double a, double b) {
+    double resultado = a - b;
+    adicionar_historico("Subtracao", a, b, resultado, 2);
+    return resultado;
+}
+
+double calcular_multiplicacao(double a, double b) {
+    double resultado = a * b;
+    adicionar_historico("Multiplicacao", a, b, resultado, 2);
+    return resultado;
+}
+
+double calcular_divisao(double a, double b, int *erro_divisao_zero) {
+    if (b == 0) {
+        *erro_divisao_zero = 1;
+        return 0.0;
+    }
+    *erro_divisao_zero = 0;
+    double resultado = a / b;
+    adicionar_historico("Divisao", a, b, resultado, 2);
+    return resultado;
+}
+
+
+// Operações avançadas
+
+double calcular_unario_avancado(int op_code, double num1, int *erro_matematico, char *tipo_op_out) {
+    *erro_matematico = 0;
+    double resultado = 0.0;
+    
+    // Converte de radianos para graus se for entrada trigonométrica
+    double angulo_graus = num1; 
+    
+    switch (op_code) {
+        case 1: strcpy(tipo_op_out, "Seno"); num1 = angulo_graus * (M_PI / 180.0); resultado = sin(num1); break;
+        case 2: strcpy(tipo_op_out, "Cosseno"); num1 = angulo_graus * (M_PI / 180.0); resultado = cos(num1); break;
+        case 3: strcpy(tipo_op_out, "Tangente"); num1 = angulo_graus * (M_PI / 180.0); resultado = tan(num1); break;
+        case 4: strcpy(tipo_op_out, "ArcSen"); if (fabs(num1) > 1) { *erro_matematico = 1; return 0; } resultado = asin(num1) * (180.0 / M_PI); break;
+        case 5: strcpy(tipo_op_out, "ArcCos"); if (fabs(num1) > 1) { *erro_matematico = 1; return 0; } resultado = acos(num1) * (180.0 / M_PI); break;
+        case 6: strcpy(tipo_op_out, "ArcTan"); resultado = atan(num1) * (180.0 / M_PI); break;
+        case 7: strcpy(tipo_op_out, "Log Nat"); if (num1 <= 0) { *erro_matematico = 2; return 0; } resultado = log(num1); break;
+        case 8: strcpy(tipo_op_out, "Log Base 10"); if (num1 <= 0) { *erro_matematico = 2; return 0; } resultado = log10(num1); break;
+        case 9: strcpy(tipo_op_out, "e^x"); resultado = exp(num1); break;
+        case 10: strcpy(tipo_op_out, "Valor Abs"); resultado = fabs(num1); break;
+        case 11: strcpy(tipo_op_out, "Teto (ceil)"); resultado = ceil(num1); break;
+        case 12: strcpy(tipo_op_out, "Piso (floor)"); resultado = floor(num1); break;
+        case 13: strcpy(tipo_op_out, "Sen Hip"); resultado = sinh(num1); break;
+        case 14: strcpy(tipo_op_out, "Cos Hip"); resultado = cosh(num1); break;
+        case 15: strcpy(tipo_op_out, "Tan Hip"); resultado = tanh(num1); break;
+        case 16: strcpy(tipo_op_out, "2^x"); resultado = pow(2, num1); break;
+        case 17: strcpy(tipo_op_out, "Raiz Cubica"); resultado = cbrt(num1); break;
+        case 18: strcpy(tipo_op_out, "10^x"); resultado = pow(10, num1); break;
+        case 19: strcpy(tipo_op_out, "Raiz Quad"); if (num1 < 0) { *erro_matematico = 3; return 0; } resultado = sqrt(num1); break;
+        default: 
+            strcpy(tipo_op_out, "Opcao Invalida");
+            *erro_matematico = -1; // opção inválida
+            return 0;
+    }
+    
+    // Registro no historico
+    
+    if (*erro_matematico == 0) {
+        adicionar_historico(tipo_op_out, angulo_graus, 0.0, resultado, 1);
+    }
+    
+    return resultado;
+}
+
+// Funções binárias/especiais
+
+double calcular_potencia(double base, double expoente) {
+    double resultado = pow(base, expoente);
+    adicionar_historico("Potencia (a^b)", base, expoente, resultado, 2);
+    return resultado;
+}
+
+long long calcular_fatorial(int n) {
+    if (n < 0 || n > 20) {
+        printf("ERRO: Fatorial de negativo ou muito grande.\n");
+        return 0;
+    }
+    if (n == 0) return 1;
+    long long resultado = 1;
+    for (int i = 2; i <= n; i++) {
+        resultado *= i;
+    }
+    adicionar_historico("Fatorial", (double)n, 0.0, (double)resultado, 1);
+    return resultado;
+}
+
+void ordenar_array(double array[], int tamanho) {
+    // ordenação do array
+    for (int i = 0; i < tamanho - 1; i++) {
+        for (int j = 0; j < tamanho - 1 - i; j++) {
+            if (array[j] > array[j + 1]) {
+                double temp = array[j];
+                array[j] = array[j + 1];
+                array[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void calcular_media_array(double array[], int tamanho) {
+    // calculando media
+    if (tamanho <= 0) { printf("ERRO: Array vazio.\n"); return; }
+    double soma = 0.0;
+    for (int i = 0; i < tamanho; i++) { soma += array[i]; }
+    double media = soma / tamanho;
+    printf("Resultado: Media = %.4f\n", media);
+    adicionar_historico("Media (Array)", media, (double)tamanho, media, 0);
+}
+
+void calcular_mediana_array(double array[], int tamanho) {
+    // calcular mediana
+    if (tamanho <= 0) { printf("ERRO: Array vazio.\n"); return; }
+    double copia[tamanho];
+    for(int i = 0; i < tamanho; i++) { copia[i] = array[i]; }
+    ordenar_array(copia, tamanho);
+    double mediana;
+    if (tamanho % 2 != 0) {
+        mediana = copia[tamanho / 2];
+    } else {
+        mediana = (copia[tamanho / 2 - 1] + copia[tamanho / 2]) / 2.0;
+    }
+    printf("Resultado: Mediana = %.4f\n", mediana);
+    adicionar_historico("Mediana (Array)", mediana, (double)tamanho, mediana, 0);
+}
+
+int calcular_mdc(int a, int b) {
+    // calculo mdc
+    int original_a = abs(a);
+    int original_b = abs(b);
+    int mdc_val = abs(a);
+    int b_val = abs(b);
+    while (b_val != 0) {
+        int temp = b_val;
+        b_val = mdc_val % b_val;
+        mdc_val = temp;
+    }
+    adicionar_historico("MDC", (double)original_a, (double)original_b, (double)mdc_val, 2);
+    return mdc_val;
+}
+
+int calcular_mmc(int a, int b) {
+    // calculo mmc
+    if (a == 0 || b == 0) { printf("AVISO: MMC de zero e zero.\n"); adicionar_historico("MMC", (double)a, (double)b, 0.0, 2); return 0; }
+    int mdc = calcular_mdc(a, b);
+    long long produto = (long long)abs(a) * abs(b);
+    int resultado = (int) (produto / mdc);
+    adicionar_historico("MMC", (double)a, (double)b, (double)resultado, 2);
+    return resultado;
+}
+
+// Operação com matrizes
+
+void ler_matriz(int M[TAMANHO_MATRIZ][TAMANHO_MATRIZ], const char *nome) {
+    printf("Digite os %d elementos da Matriz %s (por linha):\n", TAMANHO_MATRIZ * TAMANHO_MATRIZ, nome);
+    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
+        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
+            printf("Elemento [%d][%d]: ", i + 1, j + 1);
+            double valor_lido;
+            if (scanf("%lf", &valor_lido) != 1) {
+                printf("Entrada invalida. Usando 0.\n");
+                limpar_buffer();
+                valor_lido = 0;
+            }
+            M[i][j] = (int)valor_lido;
+        }
+    }
+}
+
+void imprimir_matriz(int M[TAMANHO_MATRIZ][TAMANHO_MATRIZ]) {
+    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
+        printf("|");
+        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
+            printf(" %3d ", M[i][j]);
+        }
+        printf("|\n");
+    }
+}
+
+void somar_matrizes(int A[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int B[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int C[TAMANHO_MATRIZ][TAMANHO_MATRIZ]) {
+    int resultado_soma = 0;
+    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
+        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
+            C[i][j] = A[i][j] + B[i][j];
+            resultado_soma += C[i][j];
+        }
+    }
+    adicionar_historico("Soma Matrizes 3x3", 0.0, 0.0, (double)resultado_soma, 0);
+}
+
+void multiplicar_matrizes(int A[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int B[TAMANHO_MATRIZ][TAMANHO_MATRIZ], int C[TAMANHO_MATRIZ][TAMANHO_MATRIZ]) {
+    int resultado_mult = 0;
+    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
+        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
+            C[i][j] = 0;
+            for (int k = 0; k < TAMANHO_MATRIZ; k++) {
+                C[i][j] += A[i][k] * B[k][j];
+            }
+            resultado_mult += C[i][j];
+        }
+    }
+    adicionar_historico("Multiplicacao Matrizes 3x3", 0.0, 0.0, (double)resultado_mult, 0);
+}
+
+
+// main
 
 int main() {
     int opcao;
     double num1, num2, resultado;
+    int erro_divisao = 0;
+    int erro_mat = 0;
+    char tipo_op_str[MAX_OPERACAO_NOME];
 
-    while (1) { // Loop infinito para a calculadora
-        exibirMenu();
+    do {
+        printf("\n-> CALCULADORA AVANCADA EM C <-\n");
+        printf("1. Operacoes Basicas (+, -, *, /)\n");
+        printf("2. Operacoes Avancadas (Unarias, Binarias, Estatistica)\n");
+        printf("3. Operacoes com Matrizes 3x3\n");
+        printf("4. Mostrar Historico\n");
+        printf("5. Salvar Historico em Arquivo (CSV)\n");
+        printf("0. Sair\n");
         printf("Escolha uma opcao: ");
-        scanf("%d", &opcao);
 
-        if (opcao == 0) {
-            printf("Saindo da calculadora. Ate mais!\n");
-            break; // Sai do loop
+        if (scanf("%d", &opcao) != 1) {
+            printf("Opcao invalida. Digite um numero.\n");
+            limpar_buffer();
+            opcao = -1;
+            continue;
         }
 
-        // Leitura dos números com base na opção
-        if (opcao >= 1 && opcao <= 5) {
-            printf("Digite o primeiro numero: ");
-            scanf("%lf", &num1);
-            printf("Digite o segundo numero: ");
-            scanf("%lf", &num2);
-        } else if (opcao >= 6 && opcao <= 25) {
-            printf("Digite o numero: ");
-            scanf("%lf", &num1);
-        } else {
-            printf("Opcao invalida. Tente novamente.\n");
-            continue; // Volta ao inicio do loop
-        }
+        switch (opcao) {
+            case 1:
+                // operações basicas
+                printf("\n--- OPERACOES BASICAS ---\n");
+                printf("1. Soma\n2. Subtracao\n3. Multiplicacao\n4. Divisao\n");
+                printf("Escolha a operacao: ");
+                int op_basica;
+                if (scanf("%d", &op_basica) != 1) {
+                    printf("Opcao invalida.\n");
+                    limpar_buffer();
+                    break;
+                }
+                num1 = ler_double("Digite o primeiro numero: ");
+                num2 = ler_double("Digite o segundo numero: ");
+                switch (op_basica) {
+                    case 1: resultado = calcular_soma(num1, num2); printf("Resultado: %.4f\n", resultado); break;
+                    case 2: resultado = calcular_subtracao(num1, num2); printf("Resultado: %.4f\n", resultado); break;
+                    case 3: resultado = calcular_multiplicacao(num1, num2); printf("Resultado: %.4f\n", resultado); break;
+                    case 4:
+                        resultado = calcular_divisao(num1, num2, &erro_divisao);
+                        if (erro_divisao) { printf("ERRO: Divisao por zero nao permitida.\n"); } 
+                        else { printf("Resultado: %.4f\n", resultado); }
+                        break;
+                    default: printf("Opcao de operacao basica invalida.\n");
+                }
+                break;
 
-        resultado = realizarCalculo(opcao, num1, num2);
-        printf("Resultado: %.4lf\n\n", resultado);
-    }
+            case 2: { // Operacoes avançadas
+                printf("\n--- OPERACOES AVANCADAS ---\n");
+                printf("--- BINARIAS E ESPECIAIS ---\n");
+                printf("1. Potencia (a^b)\n2. Fatorial (n!)\n");
+                printf("3. MDC\n4. MMC\n");
+                printf("--- ESTATISTICA (ARRAY) ---\n");
+                printf("5. Media de Array\n6. Mediana de Array\n");
+                printf("--- UNARIAS (TRIG, LOG, etc.) ---\n");
+                printf("7. Raiz Quadrada (sqrt) \t8. Raiz Cubica (cbrt)\n");
+                printf("9. Seno (graus) \t\t10. Cosseno (graus)\n");
+                printf("11. Tangente (graus) \t\t12. ArcSen (asin)\n");
+                printf("13. ArcCos (acos) \t\t14. ArcTan (atan)\n");
+                printf("15. Log Nat (ln) \t\t16. Log Base 10\n");
+                printf("17. e^x (exp) \t\t18. 2^x (pow(2,x))\n");
+                printf("19. 10^x (pow(10,x)) \t20. Valor Absoluto (fabs)\n");
+                printf("21. Teto (ceil) \t\t22. Piso (floor)\n");
+                printf("23. Seno Hiperbolico \t24. Cosseno Hiperbolico\n");
+                printf("25. Tangente Hiperbolica\n");
+                
+                printf("Escolha a operacao: ");
+                int op_avancada;
+                double arr_input[MAX_ELEMENTOS_ARRAY];
+                int arr_tamanho;
+                
+                 if (scanf("%d", &op_avancada) != 1) {
+                    printf("Opcao invalida.\n");
+                    limpar_buffer();
+                    break;
+                }
+                
+                switch (op_avancada) {
+                    case 1: // Potencia
+                        num1 = ler_double("Digite a base (a): ");
+                        num2 = ler_double("Digite o expoente (b): ");
+                        resultado = calcular_potencia(num1, num2);
+                        printf("Resultado: %.4f\n", resultado);
+                        break;
+                    case 2: // Fatorial
+                        int n = (int)ler_double("Digite o numero inteiro (n): ");
+                        long long fat = calcular_fatorial(n);
+                        printf("Resultado: %lld\n", fat);
+                        break;
+                    case 3: // MDC
+                        num1 = ler_double("Digite o primeiro inteiro (a): ");
+                        num2 = ler_double("Digite o segundo inteiro (b): ");
+                        resultado = (double)calcular_mdc((int)num1, (int)num2);
+                        printf("Resultado: MDC(%d, %d) = %.0f\n", (int)num1, (int)num2, resultado);
+                        break;
+                    case 4: // MMC
+                        num1 = ler_double("Digite o primeiro inteiro (a): ");
+                        num2 = ler_double("Digite o segundo inteiro (b): ");
+                        resultado = (double)calcular_mmc((int)num1, (int)num2);
+                        printf("Resultado: MMC(%d, %d) = %.0f\n", (int)num1, (int)num2, resultado);
+                        break;
+                    case 5: // Media
+                        arr_tamanho = ler_array_entrada(arr_input);
+                        if (arr_tamanho > 0) { calcular_media_array(arr_input, arr_tamanho); }
+                        break;
+                    case 6: // Mediana
+                        arr_tamanho = ler_array_entrada(arr_input);
+                        if (arr_tamanho > 0) { calcular_mediana_array(arr_input, arr_tamanho); }
+                        break;
+
+                    // unárias
+                    case 7: // Raiz quadrada
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(19, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 8: // Raiz cubica
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(17, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 9: // Seno 
+                        num1 = ler_double("Digite o angulo em graus: ");
+                        resultado = calcular_unario_avancado(1, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 10: // Cosseno 
+                        num1 = ler_double("Digite o angulo em graus: ");
+                        resultado = calcular_unario_avancado(2, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 11: // Tangente 
+                        num1 = ler_double("Digite o angulo em graus: ");
+                        resultado = calcular_unario_avancado(3, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 12: // ArcSen 
+                        num1 = ler_double("Digite o valor (-1 a 1): ");
+                        resultado = calcular_unario_avancado(4, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 13: // ArcCos 
+                        num1 = ler_double("Digite o valor (-1 a 1): ");
+                        resultado = calcular_unario_avancado(5, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 14: // ArcTan 
+                        num1 = ler_double("Digite o valor: ");
+                        resultado = calcular_unario_avancado(6, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 15: // Log Nat 
+                        num1 = ler_double("Digite o numero (x > 0): ");
+                        resultado = calcular_unario_avancado(7, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 16: // Log Base 10
+                        num1 = ler_double("Digite o numero (x > 0): ");
+                        resultado = calcular_unario_avancado(8, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 17: // e^x 
+                        num1 = ler_double("Digite o expoente (x): ");
+                        resultado = calcular_unario_avancado(9, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 18: // pow 2
+                        num1 = ler_double("Digite o expoente (x): ");
+                        resultado = calcular_unario_avancado(16, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 19: // pow 10
+                        num1 = ler_double("Digite o expoente (x): ");
+                        resultado = calcular_unario_avancado(18, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 20: // Valor Absoluto
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(10, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 21: // Teto
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(11, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 22: // Piso
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(12, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 23: // Seno Hiperbolico
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(13, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 24: // Cosseno Hiperbolico
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(14, num1, &erro_mat, tipo_op_str);
+                        break;
+                    case 25: // Tangente Hiperbolica
+                        num1 = ler_double("Digite o numero (x): ");
+                        resultado = calcular_unario_avancado(15, num1, &erro_mat, tipo_op_str);
+                        break;
+                        
+                    default: printf("Opcao de operacao avancada invalida.\n");
+                }
+                
+                // Tratamento de erro para funções unárias
+                if (op_avancada >= 7 && op_avancada <= 25) { 
+                    if (erro_mat == 0) {
+                        printf("Resultado (%s): %.4f\n", tipo_op_str, resultado);
+                    } else if (erro_mat == 1) {
+                        printf("ERRO MATEMATICO: Valor fora do dominio de ArcSen/ArcCos (deve ser entre -1 e 1).\n");
+                    } else if (erro_mat == 2) {
+                        printf("ERRO MATEMATICO: Logaritmo indefinido para numeros nao positivos.\n");
+                    } else if (erro_mat == 3) {
+                        printf("ERRO MATEMATICO: Raiz quadrada de numero negativo.\n");
+                    } else if (erro_mat == -1) {
+                        printf("Opcao de operacao avancada invalida.\n");
+                    }
+                }
+                break;
+            }
+
+            case 3: {
+                // Matrizes
+                printf("\n--- OPERACOES COM MATRIZES 3x3 ---\n");
+                printf("1. Soma de Matrizes\n2. Multiplicacao de Matrizes\n");
+                printf("Escolha a operacao: ");
+                
+                int op_matriz;
+                if (scanf("%d", &op_matriz) != 1) {
+                    printf("Opcao invalida.\n");
+                    limpar_buffer();
+                    break;
+                }
+                
+                int MatrizA[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+                int MatrizB[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+                int MatrizResultado[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+                
+                printf("\n--- ENTRADA DE DADOS ---\n");
+                ler_matriz(MatrizA, "A");
+                ler_matriz(MatrizB, "B");
+                
+                printf("\nMatriz A:\n");
+                imprimir_matriz(MatrizA);
+                printf("\nMatriz B:\n");
+                imprimir_matriz(MatrizB);
+                
+                printf("\n--- RESULTADO ---\n");
+                switch (op_matriz) {
+                    case 1:
+                        somar_matrizes(MatrizA, MatrizB, MatrizResultado);
+                        printf("Matriz Resultado (A + B):\n");
+                        imprimir_matriz(MatrizResultado);
+                        break;
+                    case 2:
+                        multiplicar_matrizes(MatrizA, MatrizB, MatrizResultado);
+                        printf("Matriz Resultado (A * B):\n");
+                        imprimir_matriz(MatrizResultado);
+                        break;
+                    default: 
+                        printf("Opcao de operacao com matrizes invalida.\n");
+                        break;
+                }
+                break;
+            }
+
+            case 4:
+                mostrar_historico();
+                break;
+
+            case 5:
+                salvar_historico_arquivo();
+                break;
+
+            case 0:
+                printf("Saindo da calculadora. Ate logo!\n");
+                break;
+
+            default:
+                printf("Opcao invalida. Tente novamente.\n");
+        }
+    } while (opcao != 0);
 
     return 0;
-}
-
-void exibirMenu() {
-    printf("--- Calculadora Cientifica ---\n");
-    printf("1.  Adicao (+)\n");
-    printf("2.  Subtracao (-)\n");
-    printf("3.  Multiplicacao (*)\n");
-    printf("4.  Divisao (/)\n");
-    printf("5.  Potencia (x^y)\n");
-    printf("6.  Raiz Quadrada (sqrt(x))\n");
-    printf("7.  Seno (sin(x))\n");
-    printf("8.  Cosseno (cos(x))\n");
-    printf("9.  Tangente (tan(x))\n");
-    printf("10. Arcoseno (asin(x))\n");
-    printf("11. Arcocosseno (acos(x))\n");
-    printf("12. Arcotangente (atan(x))\n");
-    printf("13. Logaritmo Natural (ln(x))\n");
-    printf("14. Logaritmo Base 10 (log10(x))\n");
-    printf("15. Exponencial (e^x)\n");
-    printf("16. Valor Absoluto (|x|)\n");
-    printf("17. Ceil (arredonda para cima)\n");
-    printf("18. Floor (arredonda para baixo)\n");
-    printf("19. Seno Hiperbolico (sinh(x))\n");
-    printf("20. Cosseno Hiperbolico (cosh(x))\n");
-    printf("21. Tangente Hiperbolica (tanh(x))\n");
-    printf("22. Potencia de 2 (2^x)\n");
-    printf("23. Raiz Cubica (cbrt(x))\n");
-    printf("24. Exponencial de 10 (10^x)\n");
-    printf("25. Fatorial (x!)\n");
-    printf("0.  Sair\n");
-    printf("------------------------------\n");
-}
-
-double realizarCalculo(int opcao, double num1, double num2) {
-    switch (opcao) {
-        case 1:
-            return num1 + num2;
-        case 2:
-            return num1 - num2;
-        case 3:
-            return num1 * num2;
-        case 4:
-            if (num2 != 0) {
-                return num1 / num2;
-            } else {
-                printf("Erro: Divisao por zero!\n");
-                return NAN; // Retorna Not a Number
-            }
-        case 5:
-            return pow(num1, num2);
-        case 6:
-            return sqrt(num1);
-        case 7:
-            return sin(num1);
-        case 8:
-            return cos(num1);
-        case 9:
-            return tan(num1);
-        case 10:
-            return asin(num1);
-        case 11:
-            return acos(num1);
-        case 12:
-            return atan(num1);
-        case 13:
-            return log(num1);
-        case 14:
-            return log10(num1);
-        case 15:
-            return exp(num1);
-        case 16:
-            return fabs(num1);
-        case 17:
-            return ceil(num1);
-        case 18:
-            return floor(num1);
-        case 19:
-            return sinh(num1);
-        case 20:
-            return cosh(num1);
-        case 21:
-            return tanh(num1);
-        case 22:
-            return pow(2, num1);
-        case 23:
-            return cbrt(num1);
-        case 24:
-            return pow(10, num1);
-        case 25: {
-            if (num1 < 0) {
-                printf("Erro: Fatorial de numero negativo nao existe.\n");
-                return NAN;
-            }
-            long long int resultado_fatorial = 1;
-            for (int i = 1; i <= (int)num1; i++) {
-                resultado_fatorial *= i;
-            }
-            return (double)resultado_fatorial;
-        }
-        default:
-            return NAN; // Not a Number
-    }
 }
